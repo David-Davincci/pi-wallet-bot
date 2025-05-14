@@ -1,4 +1,0 @@
-# Procfile
-web: npm run start
-worker: node src/bot/worker.js
-release: npm run migrate
