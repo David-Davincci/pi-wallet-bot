@@ -1,28 +1,49 @@
-const express = require('express');
+import express from 'express';
+import PiService from '../services/pi.js';
+
 const router = express.Router();
-const { validateSignature } = require('../services/security');
-const { handlePaymentEvent, handleTransactionEvent } = require('../bot/handlers');
+const piService = new PiService();
 
-router.post('/webhook', async (req, res) => {
-  if (!validateSignature(req.body, req.headers['x-pi-signature'])) {
-    return res.status(403).send('Invalid signature');
-  }
-
-  const event = req.body;
+router.post('/pi-webhook', async (req, res) => {
   try {
+    const verified = piService.pi.verifyWebhookSignature(req);
+    if (!verified) return res.status(403).send('Invalid signature');
+
+    const event = req.body;
     switch(event.type) {
-      case 'payment.created':
-        await handlePaymentEvent(event);
+      case 'payment_approval':
+        await handlePaymentApproval(event);
         break;
-      case 'transaction.pending_approval':
-        await handleTransactionEvent(event);
+      case 'balance_update':
+        await handleBalanceUpdate(event);
         break;
     }
+
     res.status(200).send('OK');
   } catch (error) {
     console.error('Webhook error:', error);
-    res.status(500).send('Error processing event');
+    res.status(500).send('Server error');
   }
 });
 
-module.exports = router;
+async function handlePaymentApproval(event) {
+  const user = await Database.getUserByAddress(event.payment.from_address);
+  
+  bot.sendMessage(user.chatId, `
+⚠️ Payment Approval Required
+──────────────
+Amount: ${event.payment.amount} π
+To: ${event.payment.to_address.slice(0, 6)}...${event.payment.to_address.slice(-4)}
+Memo: ${event.payment.memo || 'None'}
+──────────────
+  `, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Approve", callback_data: `approve:${event.payment.id}` },
+          { text: "❌ Reject", callback_data: `reject:${event.payment.id}` }
+        ]
+      ]
+    }
+  });
+}

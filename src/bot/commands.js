@@ -1,24 +1,36 @@
-module.exports = (bot) => {
-    bot.onText(/\/start/, (msg) => {
-      const helpText = `🔐 *Pi Wallet Guard*\n
-      /connect - Connect new wallet
-      /wallets - List connected wallets
-      /balance [name] - Check balance
-      /activateguard [name] - Enable protection
-      /deactivateguard [name] - Disable protection
-      /transactions [name] - View recent transactions
-      /disconnect [name] - Remove wallet`;
-      
-      bot.sendMessage(msg.chat.id, helpText, { parse_mode: 'Markdown' });
-    });
+import TelegramBot from 'node-telegram-bot-api';
+import PiService from '../services/pi.js';
+
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+const piService = new PiService();
+
+// Connect Wallet Command
+bot.onText(/\/connect/, (msg) => {
+  const authUrl = piService.pi.getAuthUrl();
+  bot.sendMessage(msg.chat.id, `🔗 Connect your Pi Wallet:\n${authUrl}`);
+});
+
+// List Connected Wallets
+bot.onText(/\/wallets/, async (msg) => {
+  const wallets = await Database.getWallets(msg.chat.id);
+  const message = wallets.map(w => 
+    `💰 ${w.name}: ${w.balance} π\n${w.address.slice(0, 6)}...${w.address.slice(-4)}`
+  ).join('\n\n');
   
-    bot.onText(/\/connect/, async (msg) => {
-      const state = generateRandomString(20);
-      pendingOAuthStates[msg.chat.id] = state;
-      
-      const authUrl = `https://minepi.com/oauth/authorize?client_id=${process.env.PI_API_KEY}` +
-        `&redirect_uri=${process.env.REDIRECT_URI}&state=${state}`;
-      
-      bot.sendMessage(msg.chat.id, `🔗 Connect your Pi wallet:\n${authUrl}`);
+  bot.sendMessage(msg.chat.id, `📒 Connected Wallets:\n\n${message}`);
+});
+
+// Transaction Approval Handler
+bot.on('callback_query', async (query) => {
+  const [action, txId] = query.data.split(':');
+  try {
+    const result = await piService.handlePaymentApproval(txId, action === 'approve');
+    bot.answerCallbackQuery(query.id, { 
+      text: `Transaction ${action}d successfully! ✅` 
     });
-  };
+  } catch (error) {
+    bot.answerCallbackQuery(query.id, { 
+      text: 'Failed to process transaction ❌' 
+    });
+  }
+});
