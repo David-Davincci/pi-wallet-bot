@@ -1,0 +1,53 @@
+# render.yaml
+services:
+  - type: web
+    name: pi-wallet-bot-web
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    env: node
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - group: pi-network
+      - group: telegram
+    healthCheckPath: /healthz
+    autoDeploy: true
+
+  - type: worker
+    name: pi-wallet-bot-worker
+    runtime: node
+    buildCommand: npm install
+    startCommand: node src/bot/worker.js
+    envVars:
+      - group: pi-network
+      - group: telegram
+    autoDeploy: true
+
+databases:
+  - name: pi-wallet-db
+    databaseName: pi_wallet
+    user: pi_wallet_user
+    plan: free
+
+envGroups:
+  - name: pi-network
+    envVars:
+      - key: PI_API_KEY
+        required: true
+      - key: PI_API_SECRET
+        required: true
+      - key: PI_REDIRECT_URI
+        value: https://${services.pi-wallet-bot-web.url}/auth/callback
+      - key: ENCRYPTION_KEY
+        generateValue: true
+        length: 32
+
+  - name: telegram
+    envVars:
+      - key: TELEGRAM_TOKEN
+        required: true
+      - key: AUTHORIZED_CHAT_IDS
+        required: false
